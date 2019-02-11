@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <!--link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.2.1/css/bootstrap.min.css" integrity="sha384-GJzZqFGwb1QTTN6wy59ffF1BuGJpLSa9DkKMp0DgiMDm4iYMj70gZWKYbI706tWS" crossorigin="anonymous"-->
+  <link rel="stylesheet" href="/bootstrap-darkly.min.css">
+  <style>
+/* hide drill up button */
+.highcharts-drillup-button {
+  display: none;
+}
+
+html,body {
+  height: 100%;
+}
+
+.full-height {
+  height: 100%;
+}
+
+.min-100 {
+    min-height: 100%;
+}
+
+#markdown-container {
+  overflow-y: scroll;
+  background-color: #282828;
+}
+
+</style>
+</head>
+<body>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highcharts/7.0.3/highcharts.js" integrity="sha256-xMDeombsoo/Gy2p6UAwTnuelns6zCc8OwQZP0m9DHnU=" crossorigin="anonymous"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highcharts/7.0.3/modules/sunburst.js" integrity="sha256-d14vy0QNvteoI0C2xy1MIwe71/dqFk5XtLlQriiU0A0=" crossorigin="anonymous"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.3.1/jquery.min.js" integrity="sha256-FgpCb/KJQlLNfOu91ta32o/NMZxltwRo8QtmkMRdAu8=" crossorigin="anonymous"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.6/umd/popper.min.js" integrity="sha384-wHAiFfRlMFy6i5SRaxvfOCifBUQy1xHdJ/yoi7FRNXMRBu5WHdZYu1hA6ZOblgut" crossorigin="anonymous"></script>
+  <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.2.1/js/bootstrap.min.js" integrity="sha384-B0UglyR+jN6CkvvICOB2joaf5I4l3gm9GU6Hc1og6Ls7i6U/mkkaduKaBhlAXv9k" crossorigin="anonymous"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/showdown/1.9.0/showdown.js" integrity="sha256-YpZ3n25FojLhv7mP9TGZz7SkreVaLXUV3sp0fQEQDg0=" crossorigin="anonymous"></script>
+
+  <div class="container-fluid h-100">
+  <div class="row h-100">
+    <div id="highcharts-container" class="col-sm">
+    </div>
+    <div id="markdown-container" class="col-sm">
+    </div>
+  </div>
+</div>
+  <script>
+
+  var transformedData;
+  var data;
+
+  $.getJSON("/kb.json", function( json ) {
+    data = json;
+    transformedData = transformData(data, "", []);
+    console.log(transformedData)
+    transformedData.sort((a, b) => b.value - a.value); //much better
+
+    showChart();
+  });
+
+  function transformData(data, parentId, r, path)
+  {
+    path = path || ["$"];
+
+    var node = {}
+    node.name = path[path.length - 1];
+    node.content = data.data;
+    node.path = path;
+    node.id = path.join("."); //TODO: should be the path
+    node.value = getValue(data);
+    node.parent = parentId
+    //node.color = "black" //awesome, this works :)
+    //node.fillColor = "white"
+    r.push(node);
+
+    //console.log(data)
+    var children = Object.keys(data.children).map((e) => {return {key:e, node:data.children[e]}});
+
+    children.sort((a, b) => getValue(b.node) - getValue(b.node));
+    children.forEach((e) => transformData(e.node, node.id, r, path.concat([e.key])));
+    //Object.keys(data.children).map((e) => transformData(data.children[e], node.id, r));
+
+    //outData.children.sort((a, b) => b.value - a.value)
+    return r;
+  }
+
+  function getValue(node)
+  {
+    //return 1;
+    if(node.children == null || Object.keys(node.children).length == 0)
+    {
+      return 1;
+    }
+
+    var addSelf = 0
+    return Object.keys(node.children).reduce((acc, e) => acc + getValue(node.children[e]), addSelf)
+  }
+
+
+  function showChart()
+  {
+    // Splice in transparent for the center circle
+    Highcharts.getOptions().colors.splice(0, 0, 'transparent');
+
+    var chart = Highcharts.chart('highcharts-container', {
+      credits: false, //disable highcharts link
+      exporting: { enabled: false }, //disable context menu
+      chart: {
+        //backgroundColor: "#222",
+        backgroundColor: "transparent",
+      },
+      title: {
+        text: "ZKB"
+      },
+      subtitle: {
+        //text: "todo"
+      },
+      series: [{
+        type: "sunburst",
+        data: transformedData,
+        allowDrillToNode: true,
+        shadow: { //idk how to make this work
+          color: "#88ffaa",
+          offsetX: 4,
+          offsetY: 4,
+
+        },
+        borderColor: "#222",
+
+        events: {
+          click: function(e) {
+            //TODO: get thing here and uhhhhh change address bar and uhhhh show stuff on right side
+            console.log(e.point)
+            $preview.html(converter.makeHtml(e.point.content));
+            //window.location = "/" + e.point.path.join("/");
+            history.pushState(null, "page 2", "/" + e.point.path.join("/"));
+            console.log(window.location.pathname.split("/").slice(2))
+          },
+        },
+
+        cursor: 'pointer',
+        dataLabels: {
+          format: '{point.name}',
+          filter: {
+            property: 'innerArcLength',
+            operator: '>',
+            value: 16
+          },
+          style: {
+              fontWeight: "bold",
+              color: "white",
+            },
+        },
+        levels: [
+          {
+            level: 1,
+            levelIsConstant: false,
+            dataLabels: {
+              filter: {
+                property: 'outerArcLength',
+                operator: '>',
+                value: 64
+              },
+            }
+          },
+          {
+            level: 2,
+            colorByPoint: true,
+          },
+        ]
+      }],
+      tooltip: {
+        headerFormat: "",
+        pointFormat: '<b>{point.name}</b>: <b>{point.value}</b>'
+      }
+    });
+
+    //why
+    var path = "$." + window.location.pathname.split("/").filter((e) => e != "").slice(1).join(".");
+    var nodes = transformedData.filter((e) => e.path.join(".") == path);
+    console.log(path, nodes, transformedData[0].path)
+    //if found
+    if(nodes.length > 0)
+    {
+      //get point
+      var point = chart.get(path);
+      //TODO: find a way to drill down on load
+      //set content
+      $preview.html(converter.makeHtml(point.content));
+    }
+  }
+
+  var converter = new showdown.Converter(),
+    text      = '# hello, markdown!',
+    html      = converter.makeHtml(text);
+  console.log(html)
+  var $preview = $("#markdown-container")
+  //var convert = new showdown.SanitizingConverter().makeHtml;
+
+  </script>
+</body>
+</html>
